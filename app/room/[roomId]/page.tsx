@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams } from "next/navigation";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getSupabase } from "../../../lib/supabase";
 
@@ -31,9 +31,8 @@ const validUrl = (value: string) => { try { const u = new URL(value); return u.p
 
 export default function RoomPage() {
   const params = useParams<{ roomId: string }>();
-  const searchParams = useSearchParams();
   const roomId = decodeURIComponent(params.roomId);
-  const isDesktop = searchParams.get("desktop") === "1";
+  const [isDesktop, setIsDesktop] = useState(false);
   const [name, setName] = useState("");
   const [destination, setDestination] = useState("https://example.com");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -45,7 +44,11 @@ export default function RoomPage() {
   const clientId = useMemo(() => randomId(), []);
   const desktop = typeof window !== "undefined" ? window.liveshareDesktop : undefined;
 
-  useEffect(() => { const saved = localStorage.getItem("liveshare-name"); setName(saved || randomName()); }, []);
+  useEffect(() => {
+    setIsDesktop(typeof window !== "undefined" && new URLSearchParams(window.location.search).get("desktop") === "1");
+    const saved = localStorage.getItem("liveshare-name");
+    setName(saved || randomName());
+  }, []);
 
   useEffect(() => {
     if (!name) return;
