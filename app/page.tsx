@@ -38,11 +38,12 @@ export default function Home() {
 
     const code = makeRoomCode(name);
     const title = name.trim().slice(0, 80) || "LiveShare room";
-    const { data: room, error: insertError } = await supabase.from("rooms").insert({ code, title, host_user_id: session.user.id, current_url: "https://example.com" }).select("id, code").single();
-    if (insertError || !room) { setError("Could not create the room. Please try again."); setBusy(false); return; }
-    const { error: memberError } = await supabase.from("room_members").insert({ room_id: room.id, user_id: session.user.id });
-    if (memberError) { await supabase.from("rooms").update({ is_active: false }).eq("id", room.id); setError("Could not secure the room membership. Please try again."); setBusy(false); return; }
-    setBusy(false); setOpen(false); router.push(`/room/${encodeURIComponent(room.code)}`);
+    const roomId = crypto.randomUUID();
+    const { error: insertError } = await supabase.from("rooms").insert({ id: roomId, code, title, host_user_id: session.user.id, current_url: "https://example.com" });
+    if (insertError) { setError("Could not create the room. Please try again."); setBusy(false); return; }
+    const { error: memberError } = await supabase.from("room_members").insert({ room_id: roomId, user_id: session.user.id });
+    if (memberError) { await supabase.from("rooms").update({ is_active: false }).eq("id", roomId); setError("Could not secure the room membership. Please try again."); setBusy(false); return; }
+    setBusy(false); setOpen(false); router.push(`/room/${encodeURIComponent(code)}`);
   };
 
   const showCreate = () => { setMode("create"); setError(""); setOpen(true); };
