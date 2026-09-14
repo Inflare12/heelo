@@ -1,44 +1,93 @@
 # LiveShare
 
-LiveShare is a Windows-first collaborative browsing product: create a room, invite people, synchronize navigation, see presence, and chat in one shared workspace.
+LiveShare is a Windows-first collaborative browsing product: create a room, invite people, browse arbitrary websites inside an isolated Chromium surface, synchronize navigation, show presence, and chat.
 
-## Current web MVP
+## Architecture
+
+```text
+Browser / Windows client
+        |
+        v
+Next.js room control plane
+        |
+        +---- Supabase Realtime ---- presence / broadcast
+        |
+        +---- Supabase Postgres --- room metadata / durable events
+        |
+        +---- future WebRTC ------ direct data/media transport
+        |
+Windows Electron shell
+  +-- trusted room WebContentsView
+  +-- isolated arbitrary-site WebContentsView
+  +-- main-process navigation + security boundary
+```
+
+## Web app
 
 - Next.js App Router
 - Responsive landing page
-- Stable `/room/[roomId]` URLs (no SPA 404 problem)
+- Stable `/room/[roomId]` routes
 - Room creation and invite copying
-- Optional Supabase Realtime presence
-- Realtime room navigation state
-- Realtime room chat
-- Local fallback/demo mode when Supabase is not configured
-- No third-party website content is proxied through LiveShare
+- Supabase Realtime presence
+- Realtime navigation and chat
+- Desktop-aware room control plane
+- Demo fallback when Supabase environment variables are absent
 
-## Realtime setup
+## Backend
 
-Copy `.env.example` to `.env.local` and provide a Supabase project URL and browser-safe publishable/anon key. Realtime channels are named `room:<roomId>`.
+The LiveShare backend is a dedicated Supabase project, separate from Plantinia.
 
-For production, configure Supabase security/auth policies before exposing private room data. The current room transport intentionally uses ephemeral Realtime Broadcast/Presence state rather than storing chat or browsing history.
+- Postgres: rooms and room events
+- RLS: enabled on persistent tables
+- Realtime: Broadcast + Presence for low-latency ephemeral state
+- Room expiry: built into the database schema
+- Security hardening migration: active rooms are protected by authenticated RLS policies and maintenance functions are not intended as public RPCs
 
-## Important browser limitation
+Copy `.env.example` to `.env.local` and configure the LiveShare Supabase URL and publishable key.
 
-A normal web page cannot reliably iframe arbitrary websites because many sites send `X-Frame-Options` or CSP `frame-ancestors` restrictions. Therefore the web app is the control plane, not a proxy for arbitrary pages. The planned Windows client is the data-plane browser: it will embed Chromium and connect to the same room transport so navigation, scroll, pointer/presence and collaboration commands can be synchronized without bypassing site security policies.
+## Windows client
 
-## Development
+The `desktop/` directory contains the Electron client. It uses Electron's modern `WebContentsView` rather than deprecated `BrowserView` or `<webview>`.
 
-```bash
+```powershell
+cd desktop
 npm install
-npm run dev
+$env:LIVESHARE_WEB_URL="http://localhost:3000"
+npm start -- --room=my-room
 ```
 
-Then open `http://localhost:3000`.
+Build an installer:
 
-## Production architecture
+```powershell
+npm run build
+```
 
-Web control plane: Next.js + Vercel.
+Security boundaries:
 
-Realtime: Supabase Realtime for signaling/presence/broadcast in the first production iteration.
+- `nodeIntegration: false`
+- `contextIsolation: true`
+- `sandbox: true`
+- no Electron preload in arbitrary websites
+- only HTTP(S) top-level navigation
+- popups opened externally
+- trusted room UI and arbitrary web content live in separate WebContentsViews
 
-Desktop browser: Windows-first Electron/Tauri shell with Chromium/WebView and a strict allowlist of commands sent through the room channel.
+## Browser limitation
 
-Security: short room IDs, rate limits, input validation, origin checks, CSP/security headers, abuse controls, and authenticated/private rooms before paid launch.
+A normal webpage cannot reliably iframe arbitrary websites because of `X-Frame-Options` and CSP `frame-ancestors`. LiveShare does not bypass those policies or proxy website content. The Windows client provides the actual browser surface through Chromium while the room UI exchanges only collaboration state.
+
+## CI
+
+GitHub Actions runs the Next.js typecheck/build and the Windows Electron installer build on pushes and pull requests.
+
+## Production roadmap
+
+1. Enable anonymous or permanent Supabase Auth for room membership.
+2. Switch Realtime rooms to private channels with Realtime authorization policies.
+3. Add CAPTCHA/rate limiting for anonymous room creation.
+4. Add durable room state snapshots and cleanup jobs.
+5. Add cursor/pointer annotations and richer synchronized interactions.
+6. Add WebRTC data/media channels with a TURN fallback when direct peer connectivity is unavailable.
+7. Add updater/signing and release automation for the Windows installer.
+
+The architecture deliberately keeps the control plane independent from the browser data plane so these upgrades do not require rebuilding the product from scratch.
