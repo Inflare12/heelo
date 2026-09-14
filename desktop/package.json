@@ -1,0 +1,22 @@
+{
+  "name": "liveshare-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win --x64"
+  },
+  "dependencies": {
+    "electron": "^44.3.0"
+  },
+  "devDependencies": {
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.inflare.liveshare",
+    "productName": "LiveShare",
+    "files": ["main.cjs", "preload.cjs"],
+    "win": { "target": "nsis", "artifactName": "LiveShare-${version}-Setup.${ext}" }
+  }
+}
