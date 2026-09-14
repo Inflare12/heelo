@@ -41,8 +41,15 @@ export default function Home() {
     const roomId = crypto.randomUUID();
     const { error: insertError } = await supabase.from("rooms").insert({ id: roomId, code, title, host_user_id: session.user.id, current_url: "https://example.com" });
     if (insertError) { setError("Could not create the room. Please try again."); setBusy(false); return; }
-    const { error: memberError } = await supabase.from("room_members").insert({ room_id: roomId, user_id: session.user.id });
-    if (memberError) { await supabase.from("rooms").update({ is_active: false }).eq("id", roomId); setError("Could not secure the room membership. Please try again."); setBusy(false); return; }
+
+    // Membership insertion is performed by the security-definer RPC so the
+    // membership check cannot deadlock against the member-only room SELECT policy.
+    const { data: joinedRoomId, error: memberError } = await supabase.rpc("join_room", { p_code: code });
+    if (memberError || joinedRoomId !== roomId) {
+      await supabase.from("rooms").update({ is_active: false }).eq("id", roomId);
+      setError("Could not secure the room membership. Please try again."); setBusy(false); return;
+    }
+
     setBusy(false); setOpen(false); router.push(`/room/${encodeURIComponent(code)}`);
   };
 
